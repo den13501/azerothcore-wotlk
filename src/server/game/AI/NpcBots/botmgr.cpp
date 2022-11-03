@@ -802,7 +802,7 @@ void BotMgr::_teleportBot(Creature* bot, Map* newMap, float x, float y, float z,
     if (bot->GetTransport())
     {
         bot->ClearUnitState(UNIT_STATE_IGNORE_PATHFINDING);
-        bot->GetTransport()->RemovePassenger(bot);
+        bot->GetTransport()->RemovePassenger(bot, true);
     }
 
     if (bot->IsInWorld())
@@ -1533,6 +1533,11 @@ void BotMgr::OnVehicleAttackedBy(Unit* attacker, Unit const* victim)
             if (Creature const* bot = itr->second)
                 bot->GetBotAI()->OnOwnerVehicleDamagedBy(attacker);
     }
+}
+
+void BotMgr::OnBotDamageTaken(Unit* attacker, Unit* victim, uint32 damage, CleanDamage const* cleanDamage, DamageEffectType damagetype, SpellInfo const* spellInfo)
+{
+    victim->ToCreature()->GetBotAI()->OnBotDamageTaken(attacker, damage, cleanDamage , damagetype, spellInfo);
 }
 
 void BotMgr::OnBotDamageDealt(Unit* attacker, Unit* victim, uint32 damage, CleanDamage const* cleanDamage, DamageEffectType damagetype, SpellInfo const* spellInfo)

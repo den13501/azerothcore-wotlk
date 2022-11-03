@@ -3456,7 +3456,7 @@ bool bot_ai::CanBotAttack(Unit const* target, int8 byspell) const
         (target->IsAlive() && target->IsVisible() && me->IsValidAttackTarget(target) &&
         target->isTargetableForAttack(false) && !IsInBotParty(target) &&
         ((me->CanSeeOrDetect(target) && target->InSamePhase(me)) || CanSeeEveryone()) &&
-        (!master->IsAlive() || target->IsControlledByPlayer() || master->GetDistance(target) <= foldist) &&//if master is killed pursue to the end
+        (!master->IsAlive() || target->IsControlledByPlayer() || (followdist > 0 && master->GetDistance(target) <= foldist)) &&//if master is killed pursue to the end
         (target->IsHostileTo(master) || target->IsHostileTo(me) ||//if master is controlled
         (target->GetReactionTo(me) < REP_FRIENDLY && (master->IsInCombat() || target->IsInCombat()))) &&
         (byspell == -1 || !target->IsTotem()) &&
@@ -3637,6 +3637,8 @@ Unit* bot_ai::_getTarget(bool byspell, bool ranged, bool &reset) const
             static constexpr std::array BoneSpikeIds = { CREATURE_ICC_BONE_SPIKE1, CREATURE_ICC_BONE_SPIKE2, CREATURE_ICC_BONE_SPIKE3 };
 
             auto boneSpikeCheck = [=, mydist = 50.f](Unit const* unit) mutable {
+                if (!unit->IsAlive())
+                    return false;
                 for (uint32 bsId : BoneSpikeIds) {
                     if (unit->GetEntry() == bsId)  {
                         if (HasRole(BOT_ROLE_RANGED))
@@ -4236,7 +4238,14 @@ bool bot_ai::ProcessImmediateNonAttackTarget()
             if (Rand() < 4)
             {
                 InstanceScript* iscript = me->GetMap()->ToInstanceMap()->GetInstanceScript();
-                Unit* najentus = iscript ? iscript->GetCreature(0) : nullptr; // boss_warlord_najentus.cpp::DATA_HIGH_WARLORD_NAJENTUS
+                Creature* najentus = iscript ? iscript->GetCreature(0) : nullptr; // boss_warlord_najentus.cpp::DATA_HIGH_WARLORD_NAJENTUS
+                if (!najentus)
+                {
+                    static const uint32 CREATURE_HIGH_WARLORD_NAJENTUS = 22887u;
+                    Acore::AllCreaturesOfEntryInRange check(master, CREATURE_HIGH_WARLORD_NAJENTUS, 60.f);
+                    Acore::CreatureSearcher<Acore::AllCreaturesOfEntryInRange> searcher(master, najentus, check);
+                    Cell::VisitAllObjects(master, searcher, 60.f);
+                }
 
                 if (najentus && najentus->HasAuraTypeWithMiscvalue(SPELL_AURA_SCHOOL_IMMUNITY, 127)) // Tidal Shield
                 {
@@ -4291,17 +4300,20 @@ bool bot_ai::ProcessImmediateNonAttackTarget()
             if (Unit* u = spines.empty() ? nullptr : spines.size() == 1u ? spines.front() :
                 Acore::Containers::SelectRandomContainerElement(spines))
             {
-                if (GameObject const* spine = u->GetFirstGameObjectById(185584)) // Naj'entus Spine
+                GameObject* spine = u->GetFirstGameObjectById(185584); // Naj'entus Spine
+                if (!spine)
+                {
+                    Acore::GameObjectInRangeCheck check(u->GetPositionX(), u->GetPositionY(), u->GetPositionZ(), 5.f, 185584);
+                    Acore::GameObjectLastSearcher<Acore::GameObjectInRangeCheck> searcher(u, spine, check);
+                    Cell::VisitAllObjects(u, searcher, 5.f);
+                }
+                if (spine && spine->getLootState() != GO_JUST_DEACTIVATED)
                 {
                     Player* receiver = u->GetTypeId() == TYPEID_PLAYER ? u->ToPlayer() : master;
-                    //TODO: debug najentus
-                    //if (spine->AI() && spine->AI()->GossipHello(receiver))
-                    {
-                        // Item is created by spell 39956 Create Naj'entus Spine - cannot target dead, force add item
-                        if (!receiver->IsAlive())
-                            receiver->AddItem(32408, 1); // Naj'entus Spine
-                        return true;
-                    }
+                    u->RemoveAurasDueToSpell(39837); // Remove Impaling Spine aura since it doesn't work at all right now
+                    spine->SetLootState(GO_JUST_DEACTIVATED);
+                    receiver->AddItem(32408, 1); // Naj'entus Spine
+                    return true;
                 }
             }
         }
@@ -6366,8 +6378,8 @@ void bot_ai::OnSpellHit(Unit* caster, SpellInfo const* spell)
                         }
                     }
                 }
-                //me->SetSpeedRate(MOVE_FLIGHT, master->GetSpeedRate(MOVE_FLIGHT) * 1.37f);
-                //me->SetSpeedRate(MOVE_RUN, master->GetSpeedRate(MOVE_FLIGHT) * 1.37f);
+                me->SetSpeedRate(MOVE_FLIGHT, master->GetSpeedRate(MOVE_FLIGHT) * 1.17f);
+                me->SetSpeedRate(MOVE_RUN, master->GetSpeedRate(MOVE_FLIGHT) * 1.17f);
                 me->m_movementInfo.SetMovementFlags(MOVEMENTFLAG_FLYING);
             }
             else
@@ -13419,7 +13431,7 @@ void bot_ai::_LocalizeGameObject(Player const* forPlayer, std::string &gameobjec
 
 void bot_ai::_LocalizeSpell(Player const* forPlayer, std::string &spellName, uint32 entry) const
 {
-    uint32 loc = forPlayer->GetSession()->GetSessionDbLocaleIndex();
+    uint32 loc = forPlayer->GetSession()->GetSessionDbcLocale();
     std::wstring wnamepart;
 
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(entry);
@@ -15195,9 +15207,9 @@ bool bot_ai::GlobalUpdate(uint32 diff)
         {
             if (master->GetTransport())
             {
-                if (me->GetDistance2d(master) < 20.f)
+                if (me->GetDistance2d(master) < 20.f && !master->GetTransport()->IsStaticTransport())
                 {
-                    master->GetTransport()->AddPassenger(me);
+                    master->GetTransport()->AddPassenger(me, true);
                     me->m_movementInfo.transport.pos.Relocate(master->GetTransOffset());
                     me->Relocate(GetAbsoluteTransportPosition(master));
                     me->AddUnitState(UNIT_STATE_IGNORE_PATHFINDING);
@@ -15206,7 +15218,7 @@ bool bot_ai::GlobalUpdate(uint32 diff)
             else
             {
                 me->ClearUnitState(UNIT_STATE_IGNORE_PATHFINDING);
-                me->GetTransport()->RemovePassenger(me);
+                me->GetTransport()->RemovePassenger(me, true);
             }
         }
         //Model size / Combat reach
@@ -15253,12 +15265,14 @@ bool bot_ai::GlobalUpdate(uint32 diff)
         //Zone / Area / WMOArea
         if (me->IsInWorld())
         {
+            me->SetPositionDataUpdate();
+
             uint32 newzone, newarea;
             me->GetZoneAndAreaId(newzone, newarea);
 
             if (_lastZoneId != newzone)
                 _OnZoneUpdate(newzone, newarea); // also updates area
-            else if (_lastAreaId != newarea)
+            else// if (_lastAreaId != newarea)
                 _OnAreaUpdate(newarea);
 
             if (_wmoAreaUpdateTimer <= diff)
@@ -15757,9 +15771,9 @@ bool bot_ai::FinishTeleport(/*uint32 mapId, uint32 instanceId, float x, float y,
     }
 
     me->SetMap(map);
-    if (master->GetTransport())
+    if (master->GetTransport() && !master->GetTransport()->IsStaticTransport())
     {
-        master->GetTransport()->AddPassenger(me);
+        master->GetTransport()->AddPassenger(me, true);
         me->m_movementInfo.transport.pos.Relocate(master->GetTransOffset());
         me->Relocate(GetAbsoluteTransportPosition(master));
         me->AddUnitState(UNIT_STATE_IGNORE_PATHFINDING);
@@ -16049,7 +16063,7 @@ Unit* bot_ai::SpawnVehicle(uint32 creEntry, uint32 vehEntry)
         //vc->SetTransport(me->GetTransport());
         //vc->AddUnitMovementFlag(MOVEMENTFLAG_ONTRANSPORT);
         //vc->m_movementInfo.transport.guid = GetGUID();
-        me->GetTransport()->AddPassenger(vc);
+        me->GetTransport()->AddPassenger(vc, true);
 
         vc->m_movementInfo.transport.pos.Relocate(vehpos);
         vc->Relocate(x, y, z, o);

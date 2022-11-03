@@ -199,24 +199,27 @@ public:
         return new death_knight_botAI(creature);
     }
 
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        return creature->GetBotAI()->OnGossipHello(player, 0);
+    }
+
+    bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action)
+    {
+        if (bot_ai* ai = creature->GetBotAI())
+            return ai->OnGossipSelect(player, creature, sender, action);
+        return true;
+    }
+
+    bool OnGossipSelectCode(Player* player, Creature* creature, uint32 sender, uint32 action, char const* code)
+    {
+        if (bot_ai* ai = creature->GetBotAI())
+            return ai->OnGossipSelectCode(player, creature, sender, action, code);
+        return true;
+    }
+
     struct death_knight_botAI : public bot_ai
     {
-/*
-        bool OnGossipHello(Player* player) override
-        {
-            return OnGossipHello(player, 0);
-        }
-
-        bool OnGossipSelect(Player* player, uint32 sender, uint32 action) override
-        {
-            return OnGossipSelect(player, me, sender, action);
-        }
-
-        bool OnGossipSelectCode(Player* player, uint32 sender, uint32 action, char const* code) override
-        {
-            return OnGossipSelectCode(player, me, sender, action, code);
-        }
-*/
         death_knight_botAI(Creature* creature) : bot_ai(creature)
         {
             _botclass = BOT_CLASS_DEATH_KNIGHT;
@@ -933,14 +936,14 @@ public:
         void ApplyClassDamageMultiplierMelee(uint32& /*damage*/, CalcDamageInfo& damageinfo) const override
         {
             uint8 lvl = me->GetLevel();
-            float fdamage = float(damageinfo.damage);
+            float fdamage = float(damageinfo.damages[0].damage);
             float pctbonus = 0.0f;
 
             //Blood Gorged part 1 (white attacks): 10% bonus damage for all attacks
             if ((_spec == BOT_SPEC_DK_BLOOD) && lvl >= 64 && me->HasAuraState(AURA_STATE_HEALTH_ABOVE_75_PERCENT))
                 pctbonus += 0.1f;
 
-            damageinfo.damage = uint32(fdamage * (1.0f + pctbonus));
+            damageinfo.damages[0].damage = uint32(fdamage * (1.0f + pctbonus));
         }
 
         void ApplyClassSpellCritMultiplierAll(Unit const* /*victim*/, float& crit_chance, SpellInfo const* spellInfo, SpellSchoolMask /*schoolMask*/, WeaponAttackType /*attackType*/) const override

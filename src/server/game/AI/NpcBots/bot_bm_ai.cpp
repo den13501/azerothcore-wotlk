@@ -54,6 +54,25 @@ public:
         return new blademaster_botAI(creature);
     }
 
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        return creature->GetBotAI()->OnGossipHello(player, 0);
+    }
+
+    bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action)
+    {
+        if (bot_ai* ai = creature->GetBotAI())
+            return ai->OnGossipSelect(player, creature, sender, action);
+        return true;
+    }
+
+    bool OnGossipSelectCode(Player* player, Creature* creature, uint32 sender, uint32 action, char const* code)
+    {
+        if (bot_ai* ai = creature->GetBotAI())
+            return ai->OnGossipSelectCode(player, creature, sender, action, code);
+        return true;
+    }
+
     struct blademaster_botAI : public bot_ai
     {
     private:
@@ -595,7 +614,7 @@ public:
             }
 
             CalcDamageInfo* dinfo = new CalcDamageInfo();
-            me->CalculateMeleeDamage(target, 0, dinfo, BASE_ATTACK);
+            me->CalculateMeleeDamage(target, dinfo, BASE_ATTACK);
 
             me->SetFloatValue(UNIT_FIELD_MINDAMAGE, mindam);
             me->SetFloatValue(UNIT_FIELD_MAXDAMAGE, maxdam);
@@ -653,7 +672,7 @@ public:
                 SPELL_SCHOOL_MASK_NORMAL, dinfo.GetAbsorb(), dinfo.GetResist(), false, dinfo.GetBlock(), true);
             CleanDamage cl(0, 0, BASE_ATTACK, MELEE_HIT_CRIT);
             Unit::DealDamage(me, target, dinfo.GetDamage(), &cl);
-            Unit::ProcDamageAndSpell(me, dinfo.GetVictim(), calcdinfo->procAttacker, calcdinfo->procVictim, calcdinfo->procEx, calcdinfo->damage, calcdinfo->attackType);
+            Unit::ProcDamageAndSpell(me, dinfo.GetVictim(), calcdinfo->procAttacker, calcdinfo->procVictim, calcdinfo->procEx, dinfo.GetDamage(), calcdinfo->attackType);
             me->CombatStart(target);
 
             me->resetAttackTimer(BASE_ATTACK);
