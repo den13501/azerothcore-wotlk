@@ -1433,9 +1433,9 @@ public:
     //npcbot: compatibility accessors
     [[nodiscard]] inline uint8 GetLevel() const { return getLevel(); }
     [[nodiscard]] inline uint8 GetRace(bool original = false) const { return getRace(original); }
-    [[nodiscard]] inline uint8 GetRaceMask() const { return getRaceMask(); }
+    [[nodiscard]] inline uint32 GetRaceMask() const { return getRaceMask(); }
     [[nodiscard]] inline uint8 GetClass() const { return getClass(); }
-    [[nodiscard]] inline uint8 GetClassMask() const { return getClassMask(); }
+    [[nodiscard]] inline uint32 GetClassMask() const { return getClassMask(); }
     [[nodiscard]] inline uint8 GetGender() const { return getGender(); }
     inline void SetPowerType(Powers power) { setPowerType(power); }
     [[nodiscard]] inline Powers GetPowerType() const { return getPowerType(); }
@@ -1767,7 +1767,7 @@ public:
     void SendAttackStateUpdate(uint32 HitInfo, Unit* target, uint8 SwingType, SpellSchoolMask damageSchoolMask, uint32 Damage, uint32 AbsorbDamage, uint32 Resist, VictimState TargetState, uint32 BlockedAmount);
     void SendSpellNonMeleeDamageLog(SpellNonMeleeDamage* log);
     void SendSpellNonMeleeReflectLog(SpellNonMeleeDamage* log, Unit* attacker);
-    void SendSpellNonMeleeDamageLog(Unit* target, SpellInfo const* spellInfo, uint32 Damage, SpellSchoolMask damageSchoolMask, uint32 AbsorbedDamage, uint32 Resist, bool PhysicalDamage, uint32 Blocked, bool CriticalHit = false);
+    void SendSpellNonMeleeDamageLog(Unit* target, SpellInfo const* spellInfo, uint32 Damage, SpellSchoolMask damageSchoolMask, uint32 AbsorbedDamage, uint32 Resist, bool PhysicalDamage, uint32 Blocked, bool CriticalHit = false, bool Split = false);
     void SendPeriodicAuraLog(SpellPeriodicAuraLogInfo* pInfo);
     void SendSpellMiss(Unit* target, uint32 spellID, SpellMissInfo missInfo);
     void SendSpellDamageResist(Unit* target, uint32 spellId);
