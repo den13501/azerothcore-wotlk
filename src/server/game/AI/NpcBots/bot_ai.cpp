@@ -4614,7 +4614,8 @@ void bot_ai::CalculateAttackPos(Unit* target, Position& pos, bool& force) const
         toofaraway = master->GetDistance(ppos) > (followdist > 38 ? 38.f : followdist < 20 ? 20.f : float(followdist));
         bool outoflos = !target->IsWithinLOS(ppos.m_positionX, ppos.m_positionY, ppos.m_positionZ);
         bool isinaoe = IsWithinAoERadius(ppos);
-        if (!toofaraway && !outoflos && !isinaoe)
+        bool canattack = HasRole(BOT_ROLE_RANGED) || me->IsWithinMeleeRangeAt(ppos, target);
+        if (!toofaraway && !outoflos && !isinaoe && canattack)
         {
             //if (!aoespots.empty())
             //    TC_LOG_ERROR("scripts", "CalculateAttackPos %s spot is still safe", me->GetName().c_str());
@@ -4627,7 +4628,7 @@ void bot_ai::CalculateAttackPos(Unit* target, Position& pos, bool& force) const
     AoeSafeSpotsVec safespots;
     CalculateAoeSafeSpots(target, float(followdist), safespots);
 
-    bool toofaraway1 = false;
+    bool angle_reset_to_master = false;
     for (uint8 i = 0; i < 5; ++i)
     {
         ppos = target->GetFirstCollisionPosition(dist, Position::NormalizeOrientation(angle - target->GetOrientation()));
@@ -4635,9 +4636,9 @@ void bot_ai::CalculateAttackPos(Unit* target, Position& pos, bool& force) const
         if (!toofaraway)
             break;
 
-        if (!toofaraway1)
+        if (!angle_reset_to_master)
         {
-            toofaraway1 = true;
+            angle_reset_to_master = true;
             angle = target->GetAbsoluteAngle(master);
         }
         else
@@ -4651,26 +4652,27 @@ void bot_ai::CalculateAttackPos(Unit* target, Position& pos, bool& force) const
     {
         //find closest safe spot
         Position const* closestPos = nullptr;
-        Position const* optimalPos = nullptr;
-        float mindist = 100.f;
+        Position const* closestAttackPos = nullptr;
+        float minposdist = 100.f;
+        float minattackposdist = 100.f;
         for (AoeSafeSpotsVec::const_iterator ci = safespots.begin(); ci != safespots.end(); ++ci)
         {
-            float curdist = ppos.GetExactDist2d(*ci);
-            if (curdist < mindist)
+            float curdist = me->GetExactDist2d(*ci);
+            if (curdist < minposdist)
             {
                 closestPos = &(*ci);
-                if (HasRole(BOT_ROLE_RANGED) ?
-                    (target->GetDistance(*closestPos) - me->GetCombatReach()) < dist :
-                    target->IsWithinMeleeRangeAt(*closestPos, me))
-                    optimalPos = closestPos;
-                mindist = curdist;
+                minposdist = curdist;
+            }
+            if (curdist < minattackposdist &&
+                (HasRole(BOT_ROLE_RANGED) ? (target->GetDistance(*ci) - me->GetCombatReach() < dist) : me->IsWithinMeleeRangeAt(*ci, target)))
+            {
+                closestAttackPos = &(*ci);
+                minattackposdist = curdist;
             }
         }
-        if (!optimalPos)
-            optimalPos = closestPos ? closestPos : me;
 
         //TC_LOG_ERROR("scripts", "CalculateAttackPos %u safe spots, chosen at dist %.2f", uint32(safespots.size()), mindist);
-        pos.Relocate(optimalPos);
+        pos.Relocate(closestAttackPos ? closestAttackPos : closestPos ? closestPos : me);
         force = true;
         return;
     }
@@ -4738,7 +4740,7 @@ void bot_ai::GetInPosition(bool force, Unit* newtarget, Position* mypos)
         }
         //TC_LOG_ERROR("scripts", "GetInPosition %s to %s dist %.2f, to pos %.2f", me->GetName().c_str(),
         //    newtarget->GetName().c_str(), me->GetExactDist2d(newtarget), me->GetExactDist2d(&attackpos));
-        if (force || mover->GetExactDist2d(&attackpos) > 4.f)
+        if (mover->GetExactDist2d(&attackpos) > (force ? 0.1f : 4.f))
         {
             BotMovement(BOT_MOVE_POINT, &attackpos);
             //me->GetMotionMaster()->MovePoint(newtarget->GetMapId(), attackpos);
@@ -6022,7 +6024,7 @@ void bot_ai::_OnHealthUpdate() const
     //TC_LOG_ERROR("entities.player", "_OnHealthUpdate(): updating bot %s", me->GetName().c_str());
     bool fullhp = me->GetHealth() == me->GetMaxHealth();
     float pct = fullhp ? 100.f : me->GetHealthPct(); // needs for regeneration
-    uint32 m_basehp = _classinfo->basehealth;
+    uint32 m_basehp = uint32(_classinfo->basehealth * BotMgr::GetBotHPMod());
     //TC_LOG_ERROR("entities.player", "class base health: %u", m_basehp);
     me->SetCreateHealth(m_basehp);
 
@@ -6036,7 +6038,7 @@ void bot_ai::_OnHealthUpdate() const
     //hp_add += IAmFree() ? mylevel * 375.f : 0; //+30000/+0 hp at 80
     hp_add += _getTotalBotStat(BOT_STAT_MOD_HEALTH);
     //TC_LOG_ERROR("entities.player", "health to add after stam mod: %i", hp_add);
-    uint32 m_totalhp = m_basehp + int32(hp_add); //m_totalhp = uint32(float(m_basehp + hp_add) * stammod);
+    uint32 m_totalhp = m_basehp + int32(hp_add * BotMgr::GetBotHPMod()); //m_totalhp = uint32(float(m_basehp + hp_add) * stammod);
     //TC_LOG_ERROR("entities.player", "total base health: %u", m_totalhp);
 
     //hp bonuses
@@ -7416,7 +7418,8 @@ bool bot_ai::OnGossipSelect(Player* player, Creature* creature/* == me*/, uint32
 
                         GameObject* soulwell = new GameObject;
                         if (!soulwell->Create(me->GetMap()->GenerateLowGuid<HighGuid::GameObject>(), wellGOForSpell, me->GetMap(),
-                            me->GetPhaseMask(), x,y,z, me->GetOrientation(), rot, 255, GO_STATE_READY))                        {
+                            me->GetPhaseMask(), x,y,z, me->GetOrientation(), rot, 255, GO_STATE_READY))
+                        {
                             delete soulwell;
                             BotWhisper(LocalizedNpcText(player, BOT_TEXT_FAILED), player);
                             break;
@@ -15468,7 +15471,7 @@ bool bot_ai::GlobalUpdate(uint32 diff)
                     //TC_LOG_ERROR("scripts", "%s calculates attack pos to attack %s", me->GetName().c_str(), victim->GetName().c_str());
                     bool force = false;
                     CalculateAttackPos(victim, attackpos, force);
-                    if (force || mover->GetExactDist2d(&attackpos) > 4.f)
+                    if (mover->GetExactDist2d(&attackpos) > (force ? 0.1f : 4.f))
                     {
                         //TC_LOG_ERROR("scripts", "%s moving to x %.2f y %.2f z %.2f to attack %s",
                         //    me->GetName().c_str(), attackpos.m_positionX, attackpos.m_positionY, attackpos.m_positionZ, victim->GetName().c_str());
