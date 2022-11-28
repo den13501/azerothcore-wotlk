@@ -561,6 +561,8 @@ void WorldSession::LogoutPlayer(bool save)
     m_playerSave = save;
 
     //npcbot - free all bots and remove from botmap
+    if (_player->HaveBot() && _player->GetGroup() && !_player->GetGroup()->isRaidGroup() && !_player->GetGroup()->isLFGGroup() && m_Socket && sWorld->getBoolConfig(CONFIG_LEAVE_GROUP_ON_LOGOUT))
+        _player->GetBotMgr()->RemoveAllBotsFromGroup();
     _player->RemoveAllBots();
     //end npcbots
 
@@ -1262,8 +1264,8 @@ void WorldSession::SendAddonsInfo()
     for (AddonMgr::BannedAddonList::const_iterator itr = bannedAddons->begin(); itr != bannedAddons->end(); ++itr)
     {
         data << uint32(itr->Id);
-        data.append(itr->NameMD5, sizeof(itr->NameMD5));
-        data.append(itr->VersionMD5, sizeof(itr->VersionMD5));
+        data.append(itr->NameMD5);
+        data.append(itr->VersionMD5);
         data << uint32(itr->Timestamp);
         data << uint32(1);  // IsBanned
     }
