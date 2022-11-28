@@ -12,7 +12,7 @@ x-build-params: &build-params
     USER_ID: ${DOCKER_USER_ID:-1000}
     GROUP_ID: ${DOCKER_GROUP_ID:-1000}
     DOCKER_USER: ${DOCKER_USER:-acore}
-    BUILDKIT_INLINE_CACHE: 1
+    # BUILDKIT_INLINE_CACHE: 1
   cache_from:
     - acore/ac-wotlk-authserver:${DOCKER_IMAGE_TAG:-master}
     - acore/ac-wotlk-authserver-local:${DOCKER_IMAGE_TAG:-master}
@@ -20,7 +20,8 @@ x-build-params: &build-params
     - acore/ac-wotlk-worldserver-local:${DOCKER_IMAGE_TAG:-master}
     - acore/ac-wotlk-dev-server:${DOCKER_IMAGE_TAG:-master}
     - acore/ac-wotlk-tools:${DOCKER_IMAGE_TAG:-master}
-    #- acore/ac-wotlk-client-data-server:${DOCKER_IMAGE_TAG:-master}
+    # Need to fix reduced space on GH actions first
+    # - acore/ac-wotlk-client-data:${DOCKER_IMAGE_TAG:-master}
 
 x-ac-shared-conf: &ac-shared-conf
   <<: *networks
@@ -334,7 +335,7 @@ services:
         USER_ID: ${DOCKER_USER_ID:-1000}
         GROUP_ID: ${DOCKER_GROUP_ID:-1000}
         DOCKER_USER: ${DOCKER_USER:-acore}
-        BUILDKIT_INLINE_CACHE: 1
+        # BUILDKIT_INLINE_CACHE: 1
     volumes:
       - ${DOCKER_VOL_CLIENT_DATA_PROD:-ac-client-data-prod}:/azerothcore/env/dist/data:ro
     profiles: [prod, prod-app, clientdata]
